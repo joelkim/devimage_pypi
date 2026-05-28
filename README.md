@@ -111,6 +111,14 @@ trusted-host = <host>
 > sdist 만 있는 패키지는 Windows 클라이언트에서 설치 시 컴파일러 등 빌드 도구가
 > 필요할 수 있다. 가능하면 wheel 이 제공되는 버전으로 pin 하는 것이 안정적.
 
+> **주의 — Windows 미지원 패키지**
+> `uvloop` 같이 설계상 Linux/macOS 전용인 패키지는 PyPI 에 Windows wheel/sdist
+> 자체가 없어서 다운로드 자체가 실패한다. 이런 패키지는
+> `download_packages.sh` 의 `SKIP_PACKAGES` 배열에 명시적으로 등록되어 있고
+> 빌드 실패에서 제외된다 (uvicorn[standard] 가 transitive 로 끌어오지만
+> Windows uvicorn 은 uvloop 을 import 하지 않으므로 미러에 없어도 무방).
+> 비슷한 패키지가 새로 transitive 로 들어오면 같은 배열에 추가하면 된다.
+
 > **주의 — 의존성 해결**
 > 빌드 컨테이너는 Linux 이므로 Linux 기준으로 의존성 그래프가 해결된다.
 > Windows 에서만 다른 의존성을 갖는 일부 패키지는 누락될 수 있으니

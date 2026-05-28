@@ -19,6 +19,11 @@
 #       * Windows 클라이언트는 설치 시 직접 빌드해야 하므로
 #         빌드 도구(컴파일러, Python headers 등)가 필요할 수 있다.
 #
+#   SKIP_PACKAGES — Windows 미지원 패키지
+#       * 설계상 Windows 를 지원하지 않는 패키지 (예: uvloop) 는 미리 제외.
+#       * 정규화된 이름(소문자, [-_.] 을 - 로 통일) 기준 매칭.
+#       * 빌드 실패에서도 제외되어 다른 패키지 수집은 계속된다.
+#
 # 결과: /wheels 에 Windows x64 클라이언트(Python 3.13)용 wheel + sdist 저장.
 
 set -euo pipefail
@@ -28,6 +33,35 @@ REQ="${REQ:-/build/requirements.txt}"
 PYVER="${PYVER:-3.13}"
 TMP_RESOLVE="$(mktemp -d)"
 trap 'rm -rf "${TMP_RESOLVE}"' EXIT
+
+# 구조적으로 Windows 를 지원하지 않는 패키지.
+# (uvloop: Linux/macOS 전용. uvicorn[standard] 가 transitive 로 끌어오지만
+#  Windows uvicorn 은 uvloop 을 import 하지 않으므로 미러에 없어도 무방.)
+SKIP_PACKAGES=(
+    "uvloop"
+)
+
+# 정규화: 소문자 + [-_.]+ 를 '-' 로 통일 (PEP 503)
+normalize() {
+    python3 -c "import re,sys; print(re.sub(r'[-_.]+','-',sys.argv[1]).lower())" "$1"
+}
+
+# SKIP_PACKAGES 미리 정규화
+SKIP_NORM=()
+for sp in "${SKIP_PACKAGES[@]}"; do
+    SKIP_NORM+=("$(normalize "${sp}")")
+done
+
+is_skipped() {
+    local norm
+    norm="$(normalize "$1")"
+    for sp in "${SKIP_NORM[@]}"; do
+        if [[ "${norm}" == "${sp}" ]]; then
+            return 0
+        fi
+    done
+    return 1
+}
 
 mkdir -p "${WHEELS}"
 
@@ -59,13 +93,23 @@ PY
 )
 
 echo "  해결된 패키지 수: $(echo "${SPECS}" | wc -l)"
+if [[ ${#SKIP_PACKAGES[@]} -gt 0 ]]; then
+    echo "  스킵 목록: ${SKIP_PACKAGES[*]}"
+fi
 echo ""
 echo "==> Phase 1 & 2: 패키지별 Windows wheel → sdist 폴백"
 
 wheel_ok=()
 sdist_ok=()
+skipped=()
 failed=()
 for spec in ${SPECS}; do
+    pkg_name="${spec%%==*}"
+    if is_skipped "${pkg_name}"; then
+        echo "  ~ 스킵 (Windows 미지원): ${spec}"
+        skipped+=("${spec}")
+        continue
+    fi
     # Phase 1: Windows x64 wheel 시도
     if pip download --dest "${WHEELS}" --only-binary=:all: --no-deps \
             --python-version "${PYVER}" \
@@ -92,12 +136,19 @@ echo "  ${WHEELS} 내 파일 수: $(ls -1 "${WHEELS}" | wc -l)"
 echo "  전체 크기:           $(du -sh "${WHEELS}" | cut -f1)"
 echo "  wheel 다운로드: ${#wheel_ok[@]} 개"
 echo "  sdist 폴백:     ${#sdist_ok[@]} 개"
+echo "  스킵:           ${#skipped[@]} 개"
 if [[ ${#sdist_ok[@]} -gt 0 ]]; then
     echo "  - sdist 패키지 (Windows 클라이언트에서 빌드 도구 필요할 수 있음):"
     for s in "${sdist_ok[@]}"; do echo "      ${s}"; done
 fi
+if [[ ${#skipped[@]} -gt 0 ]]; then
+    echo "  - 스킵된 패키지 (Windows 미지원):"
+    for s in "${skipped[@]}"; do echo "      ${s}"; done
+fi
 if [[ ${#failed[@]} -gt 0 ]]; then
     echo "  실패한 패키지: ${#failed[@]} 개"
     for s in "${failed[@]}"; do echo "      ${s}"; done
+    echo ""
+    echo "  → 의도된 미지원이라면 SKIP_PACKAGES 에 추가하세요."
     exit 1
 fi
