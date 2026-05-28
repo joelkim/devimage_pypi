@@ -1,0 +1,20 @@
+# PyPI 미러에 포함할 패키지 목록 (Windows x64 전용).
+# 여기 명시된 패키지와 모든 transitive 의존성이 이미지 빌드 시 다운로드되어
+# /data/packages 에 박힌다.
+#
+# Python 버전은 이미지 빌드 시 결정 (Dockerfile ARG PYTHON_VERSION,
+# 기본 3.13). PYVER 환경변수로 1_build_image.sh / 2_run_container.sh 에 전달.
+#
+# 다운로드 정책 (download_packages.sh 참조):
+#   1. Windows x64 wheel (cp<버전>-win_amd64 또는 py3-none-any) 우선.
+#   2. wheel 이 없으면 sdist 폴백 (Windows 클라이언트는 빌드 도구 필요).
+#   3. Linux 클라이언트는 지원하지 않음.
+#
+# 권장 사항:
+#   - 재현 가능한 빌드를 위해 버전을 pin (예: `requests==2.32.3`).
+#   - 완전 재현성이 필요하면 `pip-compile` 로 lock 파일 생성 권장.
+
+pip
+setuptools
+wheel
+requests

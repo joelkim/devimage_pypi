@@ -1,0 +1,9 @@
+# 도커 빌드 컨텍스트에서 제외할 항목 (이미지에 불필요한 파일들)
+.git
+.github
+.gitignore
+.dockerignore
+README.md
+build.log
+1_build_image.sh
+2_run_container.sh
