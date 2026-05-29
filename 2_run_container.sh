@@ -26,7 +26,11 @@ podman stop  "${CONTAINER}" 2>/dev/null || true
 podman rm -f "${CONTAINER}" 2>/dev/null || true
 
 # 새 컨테이너 실행
+# --pull=newer: '_latest' 는 가변 태그이므로, 레지스트리에 더 새 이미지가
+# 있으면 받아온다. (이게 없으면 사내 서버에 남은 옛 _latest 캐시를 그대로
+# 띄워서 — 예전 빌드의 비어있는/불완전한 /data/packages 가 서빙되는 함정.)
 podman run -d \
+  --pull=newer \
   --name "${CONTAINER}" \
   --restart unless-stopped \
   -p "${PORT}:8080" \

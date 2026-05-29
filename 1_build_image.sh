@@ -24,7 +24,7 @@ exec > >(tee build.log) 2>&1
 PYVER="${PYVER:-3.13}"
 IMAGE="joelkim/pypi"
 PY_TAG="py$(echo "${PYVER}" | tr -d '.')win"
-DATE_TAG="${PY_TAG}_$(date +%Y%m%d)"
+DATE_TAG="${PY_TAG}_$(date +%Y%m%dT%H%M%S)"
 LATEST_TAG="${PY_TAG}_latest"
 
 echo "==> ${IMAGE}:${DATE_TAG} 빌드 시작 (Python ${PYVER}, linux/amd64)"

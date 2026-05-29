@@ -41,7 +41,7 @@ jobs:
         run: |
           PY_TAG="py$(echo '${{ matrix.python-version }}' | tr -d '.')win"
           echo "PY_TAG=${PY_TAG}" >> "$GITHUB_OUTPUT"
-          echo "DATE_TAG=${PY_TAG}_$(date +%Y%m%d)" >> "$GITHUB_OUTPUT"
+          echo "DATE_TAG=${PY_TAG}_$(date -u +%Y%m%dT%H%M%S)" >> "$GITHUB_OUTPUT"
           echo "LATEST_TAG=${PY_TAG}_latest" >> "$GITHUB_OUTPUT"
 
       - name: Build and push (linux/amd64, Python ${{ matrix.python-version }})

@@ -56,5 +56,6 @@ sqlalchemy
 streamlit
 tiktoken
 typer
+uv
 websockets
 wheel

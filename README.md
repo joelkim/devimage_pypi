@@ -17,10 +17,13 @@
 
 | 태그 | 의미 |
 | --- | --- |
-| `py312win_YYYYMMDD` | Python 3.12 / Windows x64, 빌드 날짜 |
-| `py312win_latest`   | Python 3.12 / Windows x64, 최신 빌드 |
-| `py313win_YYYYMMDD` | Python 3.13 / Windows x64, 빌드 날짜 |
-| `py313win_latest`   | Python 3.13 / Windows x64, 최신 빌드 |
+| `py312win_YYYYMMDDTHHMMSS` | Python 3.12 / Windows x64, 빌드 타임스탬프 (UTC, 불변) |
+| `py312win_latest`   | Python 3.12 / Windows x64, 최신 빌드 (가변, 항상 최신 가리킴) |
+| `py313win_YYYYMMDDTHHMMSS` | Python 3.13 / Windows x64, 빌드 타임스탬프 (UTC, 불변) |
+| `py313win_latest`   | Python 3.13 / Windows x64, 최신 빌드 (가변, 항상 최신 가리킴) |
+
+- **타임스탬프 태그** (예: `py313win_20260529T042130`): 각 빌드마다 고유. 불변이므로 과거 버전 보관/롤백에 사용.
+- **`_latest` 태그**: 가변. 항상 최신 빌드를 가리킴. 클라이언트에서 `docker pull` / `--pull=newer` 필수.
 
 GitHub Actions 는 main 브랜치 푸시 시 `3.12` 와 `3.13` 두 버전을 동시에 빌드/푸시한다.
 
@@ -61,12 +64,23 @@ GitHub Secrets 에 `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN` 등록 필요.
 ### 2. 사내망에서 컨테이너 기동
 
 ```bash
+# _latest 는 가변 태그라 옛 캐시가 남아 있을 수 있으니 항상 최신을 받는다.
+docker pull joelkim/pypi:py313win_latest
+
 docker run -d \
   --name pypi \
   -p 8080:8080 \
+  --pull=always \
   --restart unless-stopped \
   joelkim/pypi:py313win_latest
 ```
+
+> **주의 — `_latest` 캐시 함정**
+> `_latest` 는 가변 태그다. 사내 서버에 예전 `_latest` 이미지가 캐시돼 있으면
+> `docker run` 이 새로 push 된 이미지를 받지 않고 옛것을 그대로 띄운다.
+> "빌드 로그엔 패키지가 보이는데 컨테이너 `/data/packages` 는 비어 있다" 면
+> 십중팔구 이 경우다. `docker pull` 로 강제로 최신을 받거나, 날짜 태그
+> (`py313win_YYYYMMDD`) 를 쓰면 확실하다.
 
 또는 (PYVER 미지정 시 3.13 기본):
 
