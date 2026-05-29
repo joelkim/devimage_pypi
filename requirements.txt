@@ -20,6 +20,7 @@ bash_kernel
 chromadb
 duckdb-engine
 fastapi
+fastapi-offline
 fastmcp
 griffe
 haystack-ai
