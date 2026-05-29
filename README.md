@@ -111,19 +111,23 @@ trusted-host = <host>
 > sdist 만 있는 패키지는 Windows 클라이언트에서 설치 시 컴파일러 등 빌드 도구가
 > 필요할 수 있다. 가능하면 wheel 이 제공되는 버전으로 pin 하는 것이 안정적.
 
-> **주의 — Windows 미지원 패키지**
-> `uvloop` 같이 설계상 Linux/macOS 전용인 패키지는 PyPI 에 Windows wheel/sdist
-> 자체가 없어서 다운로드 자체가 실패한다. 이런 패키지는
-> `download_packages.sh` 의 `SKIP_PACKAGES` 배열에 명시적으로 등록되어 있고
-> 빌드 실패에서 제외된다 (uvicorn[standard] 가 transitive 로 끌어오지만
-> Windows uvicorn 은 uvloop 을 import 하지 않으므로 미러에 없어도 무방).
-> 비슷한 패키지가 새로 transitive 로 들어오면 같은 배열에 추가하면 된다.
+> **의존성 해결 — Windows 환경 마커 기준**
+> 빌드 컨테이너는 Linux 이지만, `download_packages.sh` 의 Phase 0 은
+> `uv pip compile --python-platform windows --python-version <버전>` 으로
+> **Windows 환경 마커**(`sys_platform == "win32"` 등)를 평가해 의존성을 해결한다.
+> 따라서 Windows 에서만 필요한 의존성(예: `poetry → keyring → pywin32-ctypes`,
+> `colorama`, `pywin32` …)도 빠짐없이 미러에 포함된다.
+> 반대로 Linux/macOS 전용 의존성(`uvloop` 등)은 Windows 해결 그래프에 애초에
+> 등장하지 않으므로 자동으로 배제된다 — 별도 제외 목록이 필요 없다.
+>
+> (과거에는 Linux 기준 `pip download` 로 해결해 `pywin32-ctypes` 같은 Windows
+> 전용 의존성이 통째로 누락되는 문제가 있었다. 현재는 해결됨.)
 
-> **주의 — 의존성 해결**
-> 빌드 컨테이너는 Linux 이므로 Linux 기준으로 의존성 그래프가 해결된다.
-> Windows 에서만 다른 의존성을 갖는 일부 패키지는 누락될 수 있으니
-> 안전을 위해 `requirements.txt` 에 transitive deps 까지 명시 후
-> 버전을 pin 하는 것을 권장 (`pip-compile` 사용).
+> **주의 — 다운로드 불가 패키지 (안전망)**
+> Windows 해결 그래프에 들어오면서도 PyPI 에 Windows wheel/sdist 가 아예 없어
+> 다운로드 자체가 실패하는 패키지가 생기면, `download_packages.sh` 의
+> `SKIP_PACKAGES` 배열에 등록하면 빌드 실패에서 제외된다. Windows 마커 해결
+> 덕분에 이 목록은 보통 비어 있어도 된다.
 
 ---
 

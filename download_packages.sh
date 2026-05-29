@@ -2,15 +2,21 @@
 # 내장 PyPI 미러용 패키지 다운로드 스크립트 (Windows x64 전용).
 #
 # 동작 방식:
-#   Phase 0 — 의존성 해결 (임시)
-#       * `pip download -r requirements.txt` 를 임시 디렉터리에 실행하여
-#         transitive 의존성까지 포함된 전체 패키지 목록을 얻는다.
-#       * 빌드 컨테이너는 Linux 이지만 이 단계는 의존성 그래프 해결용일 뿐
-#         최종 결과물에는 포함되지 않는다.
+#   Phase 0 — 의존성 해결 (Windows 환경 마커 기준)
+#       * `uv pip compile --python-platform windows --python-version <PYVER>` 로
+#         requirements.txt 를 해결한다.
+#       * 핵심: 빌드 컨테이너는 Linux 이지만, uv 가 **Windows 환경 마커**
+#         (sys_platform == "win32" / platform_system == "Windows" 등) 를
+#         평가하므로 Windows 에서만 필요한 의존성도 빠짐없이 포함된다.
+#         (예: poetry → keyring → pywin32-ctypes, colorama, pywin32 ...)
+#       * 과거 `pip download` 방식은 Linux 마커로 해결되어 Windows 전용
+#         의존성(pywin32-ctypes 등)이 통째로 누락되는 버그가 있었다.
+#       * 반대로 Linux/macOS 전용 의존성(uvloop 등)은 Windows 해결 그래프에
+#         애초에 등장하지 않으므로 별도 제외가 필요 없다.
 #
 #   Phase 1 — Windows x64 wheel 다운로드
 #       * 해결된 각 패키지에 대해
-#         `--only-binary=:all: --python-version 3.13 --platform win_amd64`
+#         `--only-binary=:all: --python-version <PYVER> --platform win_amd64`
 #         로 wheel 을 받는다.
 #       * pure-Python wheel(`*-py3-none-any.whl`) 도 이 단계에서 함께 매칭됨.
 #
@@ -19,12 +25,15 @@
 #       * Windows 클라이언트는 설치 시 직접 빌드해야 하므로
 #         빌드 도구(컴파일러, Python headers 등)가 필요할 수 있다.
 #
-#   SKIP_PACKAGES — Windows 미지원 패키지
-#       * 설계상 Windows 를 지원하지 않는 패키지 (예: uvloop) 는 미리 제외.
+#   SKIP_PACKAGES — 안전망 (보통 비어 있음)
+#       * Windows 해결 그래프에 등장하면서도 PyPI 에 Windows wheel/sdist 가
+#         전혀 없어 다운로드 자체가 불가능한 패키지를 명시적으로 제외.
 #       * 정규화된 이름(소문자, [-_.] 을 - 로 통일) 기준 매칭.
 #       * 빌드 실패에서도 제외되어 다른 패키지 수집은 계속된다.
+#       * Windows 마커 해결로 대부분의 플랫폼 전용 패키지는 자동 배제되므로
+#         이 목록은 보통 비어 있어도 된다.
 #
-# 결과: /wheels 에 Windows x64 클라이언트(Python 3.13)용 wheel + sdist 저장.
+# 결과: /wheels 에 Windows x64 클라이언트(Python <PYVER>)용 wheel + sdist 저장.
 
 set -euo pipefail
 
@@ -32,13 +41,14 @@ WHEELS="${WHEELS:-/wheels}"
 REQ="${REQ:-/build/requirements.txt}"
 PYVER="${PYVER:-3.13}"
 TMP_RESOLVE="$(mktemp -d)"
+RESOLVED="${TMP_RESOLVE}/resolved.txt"
 trap 'rm -rf "${TMP_RESOLVE}"' EXIT
 
-# 구조적으로 Windows 를 지원하지 않는 패키지.
-# (uvloop: Linux/macOS 전용. uvicorn[standard] 가 transitive 로 끌어오지만
-#  Windows uvicorn 은 uvloop 을 import 하지 않으므로 미러에 없어도 무방.)
+# 다운로드 자체가 불가능한 패키지를 위한 안전망 (보통 비어 있음).
+# Windows 마커 해결 덕분에 플랫폼 전용 패키지(uvloop 등)는 자동 배제되므로
+# 평상시엔 빈 배열이어도 무방하다. PyPI 에 Windows 배포 파일이 아예 없어
+# 빌드가 실패하는 패키지가 새로 등장하면 여기에 추가한다.
 SKIP_PACKAGES=(
-    "uvloop"
 )
 
 # 정규화: 소문자 + [-_.]+ 를 '-' 로 통일 (PEP 503)
@@ -46,16 +56,18 @@ normalize() {
     python3 -c "import re,sys; print(re.sub(r'[-_.]+','-',sys.argv[1]).lower())" "$1"
 }
 
-# SKIP_PACKAGES 미리 정규화
+# SKIP_PACKAGES 미리 정규화 (빈 배열 안전)
 SKIP_NORM=()
-for sp in "${SKIP_PACKAGES[@]}"; do
+for sp in "${SKIP_PACKAGES[@]:-}"; do
+    [[ -z "${sp}" ]] && continue
     SKIP_NORM+=("$(normalize "${sp}")")
 done
 
 is_skipped() {
     local norm
     norm="$(normalize "$1")"
-    for sp in "${SKIP_NORM[@]}"; do
+    for sp in "${SKIP_NORM[@]:-}"; do
+        [[ -z "${sp}" ]] && continue
         if [[ "${norm}" == "${sp}" ]]; then
             return 0
         fi
@@ -65,34 +77,25 @@ is_skipped() {
 
 mkdir -p "${WHEELS}"
 
-echo "==> Phase 0: 의존성 그래프 해결 (임시)"
-pip download --dest "${TMP_RESOLVE}" -r "${REQ}" >/dev/null
+# uv 확보 (의존성 해결용). 없으면 pip 로 설치.
+if ! command -v uv >/dev/null 2>&1; then
+    echo "==> uv 미설치 — pip 로 설치"
+    pip install --no-cache-dir uv >/dev/null
+fi
 
-# 임시 디렉터리의 모든 파일에서 <name>==<version> 추출
-SPECS=$(python3 - "${TMP_RESOLVE}" <<'PY'
-import re, sys
-from pathlib import Path
+echo "==> Phase 0: 의존성 그래프 해결 (Windows 마커 / Python ${PYVER})"
+# --python-platform windows: Windows 환경 마커로 평가 → Windows 전용 의존성 포함.
+# --python-version: 대상 클라이언트 Python 버전에 맞는 그래프 해결.
+uv pip compile "${REQ}" \
+    --python-platform windows \
+    --python-version "${PYVER}" \
+    --no-header --no-annotate \
+    --output-file "${RESOLVED}" >/dev/null
 
-d = Path(sys.argv[1])
-out = set()
-for f in d.iterdir():
-    n = f.name
-    if n.endswith(".whl"):
-        parts = n[:-4].split("-")
-        out.add(f"{parts[0]}=={parts[1]}")
-    elif n.endswith(".tar.gz"):
-        m = re.match(r"(.+?)-([0-9][^-]*)\.tar\.gz$", n)
-        if m:
-            out.add(f"{m.group(1)}=={m.group(2)}")
-    elif n.endswith(".zip"):
-        m = re.match(r"(.+?)-([0-9][^-]*)\.zip$", n)
-        if m:
-            out.add(f"{m.group(1)}=={m.group(2)}")
-print("\n".join(sorted(out)))
-PY
-)
+# resolved.txt 는 `name==version` 라인들. 주석/빈 줄 제거 후 SPECS 로.
+SPECS=$(grep -vE '^\s*(#|$)' "${RESOLVED}" | sed 's/[[:space:]].*$//' | sort)
 
-echo "  해결된 패키지 수: $(echo "${SPECS}" | wc -l)"
+echo "  해결된 패키지 수: $(echo "${SPECS}" | grep -c '==' || true)"
 if [[ ${#SKIP_PACKAGES[@]} -gt 0 ]]; then
     echo "  스킵 목록: ${SKIP_PACKAGES[*]}"
 fi

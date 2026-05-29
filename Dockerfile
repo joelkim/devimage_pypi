@@ -7,7 +7,9 @@ ARG PYTHON_VERSION=3.13
 
 # ==============================================================================
 # Stage 1: 패키지 다운로더 (Windows x64 전용)
-#   - Phase 0: 임시 디렉터리에 `pip download` 로 의존성 그래프 해결.
+#   - Phase 0: `uv pip compile --python-platform windows` 로 의존성 그래프 해결.
+#              빌드 컨테이너는 Linux 이지만 Windows 환경 마커로 평가하므로
+#              pywin32-ctypes 등 Windows 전용 의존성도 빠짐없이 포함된다.
 #   - Phase 1: 해결된 각 패키지에 대해 --platform win_amd64 wheel 다운로드.
 #              (pure-Python wheel `py3-none-any` 도 여기서 매칭됨)
 #   - Phase 2: Windows wheel 이 없는 패키지는 sdist (.tar.gz / .zip) 로 폴백.
