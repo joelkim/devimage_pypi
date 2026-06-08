@@ -28,6 +28,7 @@ ipykernel
 jsonschema
 jupysql
 jupyterlab
+jwt
 langchain
 langgraph
 litellm
