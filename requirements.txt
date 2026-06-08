@@ -28,7 +28,6 @@ ipykernel
 jsonschema
 jupysql
 jupyterlab
-jwt
 langchain
 langgraph
 litellm
@@ -46,6 +45,7 @@ polars
 pre-commit
 psycopg2-binary
 pydantic
+PyJWT
 pytest
 python-dotenv
 pyyaml
