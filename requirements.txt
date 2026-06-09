@@ -15,6 +15,7 @@
 #   - 완전 재현성이 필요하면 `pip-compile` 로 lock 파일 생성 권장.
 
 aiohttp
+altair
 autogenstudio
 bash_kernel
 chromadb
@@ -33,6 +34,7 @@ langgraph
 litellm
 llama-index
 lxml
+matplotlib
 mcp
 mypy
 networkx
@@ -40,10 +42,12 @@ ollama
 openai-agents
 pandas
 pip
+plotly
 poetry
 polars
 pre-commit
 psycopg2-binary
+pyarrow
 pydantic
 PyJWT
 pytest
@@ -53,6 +57,7 @@ requests
 rich
 ruff
 scikit-learn
+seaborn
 setuptools
 sqlalchemy
 streamlit
