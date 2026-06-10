@@ -44,9 +44,17 @@ LABEL org.opencontainers.image.source="https://github.com/joelkim/devimage_pypi"
 
 ENV PYPI_PACKAGES_DIR=/data/packages \
     PYPI_PORT=8080 \
-    PYPI_PYTHON_VERSION=${PYTHON_VERSION}
+    PYPI_PYTHON_VERSION=${PYTHON_VERSION} \
+    # gunicorn 동시성 튜닝 — 런타임에 -e 로 덮어쓸 수 있다.
+    #   WEB_CONCURRENCY: 워커(프로세스) 수. CPU 코어 수 안팎 권장.
+    #   GUNICORN_THREADS: 워커당 스레드 수. 동시 처리량 ≈ 워커×스레드.
+    #   GUNICORN_TIMEOUT: 느린 클라이언트로의 대용량 wheel 전송 대비 넉넉히.
+    WEB_CONCURRENCY=4 \
+    GUNICORN_THREADS=8 \
+    GUNICORN_TIMEOUT=120
 
-RUN pip install --no-cache-dir "pypiserver[passlib]" && \
+# pypiserver 와 함께 gunicorn 설치 — 멀티 워커/스레드로 동접 처리.
+RUN pip install --no-cache-dir "pypiserver[passlib]" gunicorn && \
     mkdir -p "${PYPI_PACKAGES_DIR}" && \
     rm -rf /root/.cache
 
@@ -58,6 +66,10 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8080/').status==200 else 1)" || exit 1
 
-# -a . / -P .  -> 모든 동작에 대해 인증 비활성화
-# -i 0.0.0.0   -> 모든 인터페이스 바인딩
-CMD ["pypi-server", "run", "-p", "8080", "-i", "0.0.0.0", "-a", ".", "-P", ".", "/data/packages"]
+# gunicorn 뒤에 pypiserver WSGI 앱(pypiserver:app)을 올려 동접을 처리한다.
+#   - 기존 단일 wsgiref 서버는 싱글스레드라 uv 의 병렬 커넥션에 쉽게 죽었다.
+#   - -k gthread + 멀티 워커: 대용량 wheel 전송 중에도 다른 요청을 막지 않음.
+#   - root=/data/packages: 서빙할 패키지 디렉터리.
+#     읽기(install)는 익명 허용이 기본이라 별도 인증 설정 불필요.
+# 동시성은 WEB_CONCURRENCY / GUNICORN_THREADS 환경변수로 조절(위 ENV 참조).
+CMD ["sh", "-c", "exec gunicorn -k gthread -w \"${WEB_CONCURRENCY}\" --threads \"${GUNICORN_THREADS}\" --timeout \"${GUNICORN_TIMEOUT}\" -b 0.0.0.0:8080 'pypiserver:app(root=\"/data/packages\")'"]

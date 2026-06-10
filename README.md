@@ -75,6 +75,20 @@ docker run -d \
   joelkim/pypi:py313win_latest
 ```
 
+> **동시 접속(uv 등) 튜닝**
+> 런타임 서버는 gunicorn 이며 기본 동시 처리량은 `WEB_CONCURRENCY`(워커, 기본 4)
+> × `GUNICORN_THREADS`(스레드, 기본 8) ≈ 32 이다. uv 처럼 커넥션을 많이 여는
+> 클라이언트가 몰려 서버가 버거우면 환경변수로 키운다:
+>
+> ```bash
+> docker run -d --name pypi -p 8080:8080 \
+>   -e WEB_CONCURRENCY=8 -e GUNICORN_THREADS=16 \
+>   --restart unless-stopped joelkim/pypi:py313win_latest
+> ```
+>
+> (과거 단일 wsgiserver 시절엔 동접이 몰리면 헬스체크 실패→재시작으로 죽는
+> 문제가 있었다. gunicorn 멀티 워커/스레드로 해결됨.)
+
 > **주의 — `_latest` 캐시 함정**
 > `_latest` 는 가변 태그다. 사내 서버에 예전 `_latest` 이미지가 캐시돼 있으면
 > `docker run` 이 새로 push 된 이미지를 받지 않고 옛것을 그대로 띄운다.
@@ -147,11 +161,14 @@ trusted-host = <host>
 
 ## 추가 패키지를 런타임에 얹기 (선택)
 
-이미지에 박힌 패키지 외에 호스트의 wheel 디렉터리도 같이 서빙하려면 바인드 마운트:
+이미지에 박힌 패키지 외에 호스트의 wheel 디렉터리도 같이 서빙하려면 바인드 마운트
+후, gunicorn 의 pypiserver 앱에 `root` 리스트로 디렉터리를 추가한다:
 
 ```bash
 docker run -d --name pypi -p 8080:8080 \
   -v /host/extra-wheels:/data/extra:ro \
   joelkim/pypi:py313win_latest \
-  pypi-server run -p 8080 -i 0.0.0.0 -a . -P . /data/packages /data/extra
+  sh -c 'exec gunicorn -k gthread -w "${WEB_CONCURRENCY}" --threads "${GUNICORN_THREADS}" \
+    --timeout "${GUNICORN_TIMEOUT}" -b 0.0.0.0:8080 \
+    '\''pypiserver:app(root=["/data/packages","/data/extra"])'\'''
 ```
