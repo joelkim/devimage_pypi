@@ -69,7 +69,8 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
 # gunicorn 뒤에 pypiserver WSGI 앱(pypiserver:app)을 올려 동접을 처리한다.
 #   - 기존 단일 wsgiref 서버는 싱글스레드라 uv 의 병렬 커넥션에 쉽게 죽었다.
 #   - -k gthread + 멀티 워커: 대용량 wheel 전송 중에도 다른 요청을 막지 않음.
-#   - root=/data/packages: 서빙할 패키지 디렉터리.
+#   - roots=/data/packages: 서빙할 패키지 디렉터리.
+#     (구버전 인자명 root 는 deprecated — roots 로 변경됨.)
 #     읽기(install)는 익명 허용이 기본이라 별도 인증 설정 불필요.
 # 동시성은 WEB_CONCURRENCY / GUNICORN_THREADS 환경변수로 조절(위 ENV 참조).
-CMD ["sh", "-c", "exec gunicorn -k gthread -w \"${WEB_CONCURRENCY}\" --threads \"${GUNICORN_THREADS}\" --timeout \"${GUNICORN_TIMEOUT}\" -b 0.0.0.0:8080 'pypiserver:app(root=\"/data/packages\")'"]
+CMD ["sh", "-c", "exec gunicorn -k gthread -w \"${WEB_CONCURRENCY}\" --threads \"${GUNICORN_THREADS}\" --timeout \"${GUNICORN_TIMEOUT}\" -b 0.0.0.0:8080 'pypiserver:app(roots=\"/data/packages\")'"]

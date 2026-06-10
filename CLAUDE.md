@@ -56,7 +56,7 @@ pip install --index-url http://localhost:8080/simple/ --trusted-host localhost r
 3. **Dockerfile** — 멀티스테이지. Stage 1(`downloader`)이 `/wheels`에 패키지를
    모으고, Stage 2가 `pypiserver[passlib]` + `gunicorn`을 설치한 뒤 `/wheels`를
    `/data/packages`로 복사한다. 런타임은 **gunicorn 뒤에 pypiserver WSGI 앱**
-   (`pypiserver:app(root="/data/packages")`)을 올려 서빙한다 — 자세한 내용은
+   (`pypiserver:app(roots="/data/packages")`)을 올려 서빙한다 — 자세한 내용은
    아래 "동시성/서버" 참조. `ARG PYTHON_VERSION`(기본 3.13)이 베이스 이미지·
    다운로더·서버 전부의 Python 버전을 결정한다.
 
@@ -66,7 +66,7 @@ pip install --index-url http://localhost:8080/simple/ --trusted-host localhost r
 
 ```
 gunicorn -k gthread -w ${WEB_CONCURRENCY} --threads ${GUNICORN_THREADS} \
-  --timeout ${GUNICORN_TIMEOUT} -b 0.0.0.0:8080 'pypiserver:app(root="/data/packages")'
+  --timeout ${GUNICORN_TIMEOUT} -b 0.0.0.0:8080 'pypiserver:app(roots="/data/packages")'
 ```
 
 - 과거 단일 wsgiref 서버는 싱글스레드라 uv의 병렬 커넥션에 큐가 밀려 헬스체크
@@ -75,8 +75,8 @@ gunicorn -k gthread -w ${WEB_CONCURRENCY} --threads ${GUNICORN_THREADS} \
   4×8=32. 환경변수로 런타임에 덮어쓴다: `docker run -e WEB_CONCURRENCY=8 ...`.
 - install(읽기)은 pypiserver 기본이 익명 허용이라 별도 인증 인자가 필요 없다
   (기존 `-a . -P .` 가 열어주던 익명 *업로드*는 빠짐 — 읽기 전용 미러라 무방).
-- 런타임에 추가 wheel 디렉터리를 더 서빙하려면 root에 리스트를 넘긴다:
-  `pypiserver:app(root=["/data/packages","/data/extra"])`.
+- 런타임에 추가 wheel 디렉터리를 더 서빙하려면 roots에 리스트를 넘긴다:
+  `pypiserver:app(roots=["/data/packages","/data/extra"])`.
 
 ### 빌드/배포 흐름
 

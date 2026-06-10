@@ -170,5 +170,5 @@ docker run -d --name pypi -p 8080:8080 \
   joelkim/pypi:py313win_latest \
   sh -c 'exec gunicorn -k gthread -w "${WEB_CONCURRENCY}" --threads "${GUNICORN_THREADS}" \
     --timeout "${GUNICORN_TIMEOUT}" -b 0.0.0.0:8080 \
-    '\''pypiserver:app(root=["/data/packages","/data/extra"])'\'''
+    '\''pypiserver:app(roots=["/data/packages","/data/extra"])'\'''
 ```
