@@ -19,6 +19,7 @@ altair
 autogenstudio
 bash_kernel
 chromadb
+deltalake
 duckdb-engine
 fastapi
 fastapi-offline
